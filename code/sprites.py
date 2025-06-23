@@ -158,14 +158,82 @@ class Gun(pygame.sprite.Sprite):
         )
 
 
+# Enemy Class
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self, pos, groups, player, collsion_sprites):
+    def __init__(self, pos, frames, groups, player, collsion_sprites):
         super().__init__(*groups)
-        self.image = pygame.image.load(join("images", "enemy", "enemy.png"))
+        # general setup
+        self.frames = frames
+        self.frame_index = 0
+        self.animation_speed = 6
 
+        self.image = self.frames[self.frame_index]
+        self.rect = self.image.get_frect(center=pos)
+        self.hitbox_rect = self.rect.inflate(-60, -90)
+
+        # other attributes
         self.player = player
         self.collsion_sprites = collsion_sprites
 
-        self.rect = self.image.get_frect(center=pos)
+        # movement
         self.speed = 200
-        self.direction = pygame.Vector2(0, 0)
+        self.direction = pygame.Vector2()
+
+        # timer
+        self.death_time = 0
+        self.death_duration = 100
+
+    def collsion(self, direction):
+        for sprite in self.collsion_sprites:
+            if sprite.rect.colliderect(self.hitbox_rect):
+                if direction == "horizontal":
+                    if self.direction.x > 0:
+                        self.hitbox_rect.right = sprite.rect.left
+                    if self.direction.x < 0:
+                        self.hitbox_rect.left = sprite.rect.right
+                if direction == "vertical":
+                    if self.direction.y < 0:
+                        self.hitbox_rect.top = sprite.rect.bottom
+                    if self.direction.y > 0:
+                        self.hitbox_rect.bottom = sprite.rect.top
+
+    def get_player_direction(self):
+        player_pos = pygame.Vector2(self.player.rect.center)
+        enemy_pos = pygame.Vector2(self.rect.center)
+
+        self.direction = player_pos - enemy_pos
+        if self.direction.length() > 0:
+            self.direction = self.direction.normalize()
+
+    def destroy(self):
+        self.death_time = pygame.time.get_ticks()
+
+        surf = pygame.mask.from_surface(self.frames[0]).to_surface()
+        surf.set_colorkey("black")
+
+        self.image = surf
+
+    def death_timer(self):
+        if pygame.time.get_ticks() - self.death_time >= self.death_duration:
+            self.kill()
+
+    def move(self, dt):
+        self.hitbox_rect.x += self.direction.x * self.speed * dt
+        self.collsion("horizontal")
+
+        self.hitbox_rect.y += self.direction.y * self.speed * dt
+        self.collsion("vertical")
+
+        self.rect.center = self.hitbox_rect.center
+
+    def animate(self, dt):
+        self.frame_index += self.animation_speed * dt
+        self.image = self.frames[int(self.frame_index) % len(self.frames)]
+
+    def update(self, dt):
+        if self.death_time == 0:
+            self.get_player_direction()
+            self.move(dt)
+            self.animate(dt)
+        else:
+            self.death_timer()
